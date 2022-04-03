@@ -7,18 +7,20 @@
 package main
 
 import (
+	"github.com/ATenderholt/rainbow-storage/internal/http"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
+	"github.com/google/wire"
 )
 
 // Injectors from inject.go:
 
 func InjectApp(cfg *settings.Config) (App, error) {
-	app := NewApp(cfg)
+	minioHandler := http.NewMinioHandler(cfg)
+	mux := http.NewChiMux(minioHandler)
+	app := NewApp(cfg, mux)
 	return app, nil
 }
 
 // inject.go:
 
-func NewApp(cfg *settings.Config) App {
-	return App{cfg}
-}
+var api = wire.NewSet(http.NewChiMux, http.NewMinioHandler)
