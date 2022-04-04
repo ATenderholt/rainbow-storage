@@ -60,6 +60,7 @@ func start(ctx context.Context, config *settings.Config) error {
 	err = app.Start()
 	if err != nil {
 		logger.Errorf("Unable to start application: %v", err)
+		app.Shutdown()
 		return err
 	}
 

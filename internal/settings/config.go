@@ -3,6 +3,7 @@ package settings
 import (
 	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,8 +13,9 @@ const (
 	DefaultAccountNumber = "271828182845"
 	DefaultRegion        = "us-west-2"
 
-	DefaultBasePort = 9003
+	DefaultBasePort = 9000
 	DefaultDataPath = "data"
+	DefaultImage    = "bitnami/minio:2022.2.16"
 
 	DefaultNetworks = "rainbow"
 )
@@ -26,6 +28,7 @@ type Config struct {
 
 	BasePort int
 	dataPath string
+	Image    string
 
 	Networks []string
 }
@@ -43,6 +46,14 @@ func (config *Config) DataPath() string {
 	return filepath.Join(cwd, config.dataPath)
 }
 
+func (config *Config) MinioUrl() string {
+	if config.IsLocal {
+		return fmt.Sprintf("http://localhost:%d", config.BasePort+1)
+	} else {
+		return "http://s3:9000"
+	}
+}
+
 func DefaultConfig() *Config {
 	logger.Debugf("Creating directory %s if necessary ...", DefaultDataPath)
 
@@ -58,6 +69,7 @@ func DefaultConfig() *Config {
 		Region:        DefaultRegion,
 		BasePort:      DefaultBasePort,
 		dataPath:      DefaultDataPath,
+		Image:         DefaultImage,
 		Networks:      []string{DefaultNetworks},
 	}
 }
@@ -92,6 +104,7 @@ func FromFlags(name string, args []string) (*Config, string, error) {
 	flags.BoolVar(&cfg.IsLocal, "local", true, "Application should use localhost when routing lambda")
 	flags.StringVar(&cfg.Region, "region", DefaultRegion, "Region returned in ARNs")
 	flags.IntVar(&cfg.BasePort, "port", DefaultBasePort, "Port used for HTTP and start of port range for individual lambdas")
+	flags.StringVar(&cfg.Image, "image", DefaultImage, "Image to use for backing storage")
 	flags.StringVar(&cfg.dataPath, "data-path", DefaultDataPath, "Path to persist data and lambdas")
 	flags.Var(&networks, "networks", "Comma-separated list of Networks for lambda containers")
 

@@ -7,9 +7,13 @@ import (
 
 func NewChiMux(minio MinioHandler) *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(middleware.StripSlashes)
+	r.Use(middleware.Logger)
 
-	r.Post("/", minio.Proxy)
+	r.Head("/*", minio.Proxy)
+	r.Get("/*", minio.Proxy)
+	r.Post("/*", minio.Proxy)
+	r.Put("/*", minio.Proxy)
+	r.Delete("/*", minio.Proxy)
 
 	return r
 }

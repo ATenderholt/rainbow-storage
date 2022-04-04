@@ -7,6 +7,7 @@
 package main
 
 import (
+	"github.com/ATenderholt/dockerlib"
 	"github.com/ATenderholt/rainbow-storage/internal/http"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/google/wire"
@@ -15,9 +16,13 @@ import (
 // Injectors from inject.go:
 
 func InjectApp(cfg *settings.Config) (App, error) {
+	dockerController, err := dockerlib.NewDockerController()
+	if err != nil {
+		return App{}, err
+	}
 	minioHandler := http.NewMinioHandler(cfg)
 	mux := http.NewChiMux(minioHandler)
-	app := NewApp(cfg, mux)
+	app := NewApp(cfg, dockerController, mux)
 	return app, nil
 }
 
