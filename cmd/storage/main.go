@@ -15,7 +15,7 @@ import (
 var logger *zap.SugaredLogger
 
 func init() {
-	logger = logging.NewLogger()
+	logger = logging.NewLogger().Named("main")
 }
 
 func main() {

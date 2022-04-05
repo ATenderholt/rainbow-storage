@@ -1,6 +1,8 @@
 package http
 
 import (
+	"bytes"
+	"encoding/xml"
 	"fmt"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -21,18 +23,45 @@ func NewMinioHandler(cfg *settings.Config) MinioHandler {
 	}
 }
 
+func (h MinioHandler) handleNotificationConfiguration(w http.ResponseWriter, request *http.Request, payload []byte) {
+	var notification string
+	err := xml.Unmarshal(payload, &notification)
+	if err != nil {
+		msg := fmt.Sprintf("unable to unmarshall notification %s: %v", string(payload), err)
+		logger.Error(msg)
+		http.Error(w, msg, http.StatusInternalServerError)
+		return
+	}
+
+	logger.Infof("Received Notification %+v for URL %s", notification, request.URL.Path)
+	//if len(notification.LambdaFunctionConfigurations) == 0 {
+	//	logger.Infof("No configuration found fo raw payload: %s", string(payload))
+	//	logger.Infof("Query params: %v", request.URL.RawQuery)
+	//}
+
+	http.Error(w, "Not found", http.StatusNotFound)
+}
+
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 	url := h.cfg.MinioUrl() + request.URL.Path
 	logger.Infof("Forwarding to %s", url)
 
-	var payload strings.Builder
-	reader := io.TeeReader(request.Body, &payload)
+	payload, err := io.ReadAll(request.Body)
+	request.Body.Close()
+
+	switch {
+	case bytes.Contains(payload, []byte("NotificationConfiguration")):
+		h.handleNotificationConfiguration(w, request, payload)
+		return
+	}
+
+	reader := bytes.NewReader(payload)
 	proxyReq, _ := http.NewRequest(request.Method, url, reader)
 
 	credentials := aws.Credentials{AccessKeyID: "minio", SecretAccessKey: "miniosecret"}
 
 	signer := v4.NewSigner()
-	err := signer.SignHTTP(request.Context(), credentials, proxyReq,
+	err = signer.SignHTTP(request.Context(), credentials, proxyReq,
 		"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		"s3", h.cfg.Region, time.Now())
 
@@ -65,10 +94,10 @@ func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, body)
-	
+
 	if resp.StatusCode != 200 {
 		logger.Infof("Response (%d): %s", resp.StatusCode, response.String())
-		logger.Infof("Request payload: %s", payload.String())
+		logger.Infof("Request payload: %s", payload)
 	}
 
 	return
