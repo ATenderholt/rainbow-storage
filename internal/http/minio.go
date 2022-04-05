@@ -22,11 +22,11 @@ func NewMinioHandler(cfg *settings.Config) MinioHandler {
 }
 
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
-	url := h.cfg.MinioUrl()
+	url := h.cfg.MinioUrl() + request.URL.Path
 	logger.Infof("Forwarding to %s", url)
 
-	var stringBuilder strings.Builder
-	reader := io.TeeReader(request.Body, &stringBuilder)
+	var payload strings.Builder
+	reader := io.TeeReader(request.Body, &payload)
 	proxyReq, _ := http.NewRequest(request.Method, url, reader)
 
 	credentials := aws.Credentials{AccessKeyID: "minio", SecretAccessKey: "miniosecret"}
@@ -48,15 +48,10 @@ func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 	if err != nil {
 		msg := fmt.Sprintf("Unable to proxy to Minio: %v", err)
 		logger.Error(msg)
-		http.Error(w, msg, resp.StatusCode)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 	defer resp.Body.Close()
-
-	logger.Infof("Got following response from Minio: %+v", resp)
-	if resp.StatusCode != 200 {
-		logger.Infof("Request payload: %s", stringBuilder.String())
-	}
 
 	for key, value := range resp.Header {
 		for _, v := range value {
@@ -65,8 +60,16 @@ func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 
 	}
 
+	var response strings.Builder
+	body := io.TeeReader(resp.Body, &response)
+
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	io.Copy(w, body)
+	
+	if resp.StatusCode != 200 {
+		logger.Infof("Response (%d): %s", resp.StatusCode, response.String())
+		logger.Infof("Request payload: %s", payload.String())
+	}
 
 	return
 }
