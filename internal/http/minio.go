@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"github.com/ATenderholt/rainbow-storage/internal/domain"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -24,7 +25,7 @@ func NewMinioHandler(cfg *settings.Config) MinioHandler {
 }
 
 func (h MinioHandler) handleNotificationConfiguration(w http.ResponseWriter, request *http.Request, payload []byte) {
-	var notification string
+	var notification domain.NotificationConfiguration
 	err := xml.Unmarshal(payload, &notification)
 	if err != nil {
 		msg := fmt.Sprintf("unable to unmarshall notification %s: %v", string(payload), err)
@@ -34,10 +35,10 @@ func (h MinioHandler) handleNotificationConfiguration(w http.ResponseWriter, req
 	}
 
 	logger.Infof("Received Notification %+v for URL %s", notification, request.URL.Path)
-	//if len(notification.LambdaFunctionConfigurations) == 0 {
-	//	logger.Infof("No configuration found fo raw payload: %s", string(payload))
-	//	logger.Infof("Query params: %v", request.URL.RawQuery)
-	//}
+	if len(notification.CloudFunctionConfigurations) == 0 {
+		logger.Infof("No configuration found fo raw payload: %s", string(payload))
+		logger.Infof("Query params: %v", request.URL.RawQuery)
+	}
 
 	http.Error(w, "Not found", http.StatusNotFound)
 }
