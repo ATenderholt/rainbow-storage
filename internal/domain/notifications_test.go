@@ -1,9 +1,13 @@
 package domain_test
 
 import (
+	"context"
 	"encoding/xml"
 	"github.com/ATenderholt/rainbow-storage/internal/domain"
+	"github.com/reactivex/rxgo/v2"
+	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 const notificationExample = `<NotificationConfiguration
@@ -27,6 +31,14 @@ const notificationExample = `<NotificationConfiguration
         <CloudFunction>arn:aws:lambda:us-west-2:271828182845:function:myaws-copy-file</CloudFunction>
     </CloudFunctionConfiguration>
 </NotificationConfiguration>`
+
+type Collector struct {
+	keys []string
+}
+
+func (c *Collector) Append(_ string, i interface{}) {
+	c.keys = append(c.keys, i.(domain.NotificationEvent).Key)
+}
 
 func TestNotificationUnmarshall(t *testing.T) {
 	var notification domain.NotificationConfiguration
@@ -52,4 +64,30 @@ func TestNotificationUnmarshall(t *testing.T) {
 	if events[1] != "s3:ObjectCreated:*" {
 		t.Errorf("Expected event %s but got %s", "s3:ObjectCreated:*", events[1])
 	}
+}
+
+func TestSingleNotificationCloudFunctionConfigurations(t *testing.T) {
+	cfg := domain.NotificationConfiguration{
+		CloudFunctionConfigurations: []domain.CloudFunctionConfiguration{
+			{
+				Events:        []string{domain.ObjectCreatedFilter},
+				CloudFunction: "some.string",
+			},
+		},
+	}
+
+	var c Collector
+	ch, ctx := cfg.Start(c.Append)
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file3.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file4.bin"}}
+	close(ch)
+
+	timeout, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	<-timeout.Done()
+
+	assert.Equal(t, c.keys, []string{"file1.bin", "file2.bin", "file4.bin"})
 }
