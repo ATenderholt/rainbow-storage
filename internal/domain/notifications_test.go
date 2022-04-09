@@ -33,11 +33,21 @@ const notificationExample = `<NotificationConfiguration
 </NotificationConfiguration>`
 
 type Collector struct {
-	keys []string
+	keys map[string][]string
 }
 
-func (c *Collector) Append(_ string, i interface{}) {
-	c.keys = append(c.keys, i.(domain.NotificationEvent).Key)
+func (c *Collector) Append(source string, i interface{}) {
+	if c.keys == nil {
+		c.keys = make(map[string][]string)
+	}
+
+	items, ok := c.keys[source]
+	if !ok {
+		items = []string{}
+	}
+
+	items = append(items, i.(domain.NotificationEvent).Key)
+	c.keys[source] = items
 }
 
 func TestNotificationUnmarshall(t *testing.T) {
@@ -66,12 +76,12 @@ func TestNotificationUnmarshall(t *testing.T) {
 	}
 }
 
-func TestSingleNotificationCloudFunctionConfigurations(t *testing.T) {
+func TestSingleNotificationCloudFunctionConfigurationsOnlyCreates(t *testing.T) {
 	cfg := domain.NotificationConfiguration{
 		CloudFunctionConfigurations: []domain.CloudFunctionConfiguration{
 			{
 				Events:        []string{domain.ObjectCreatedFilter},
-				CloudFunction: "some.string",
+				CloudFunction: "create",
 			},
 		},
 	}
@@ -89,5 +99,77 @@ func TestSingleNotificationCloudFunctionConfigurations(t *testing.T) {
 
 	<-timeout.Done()
 
-	assert.Equal(t, c.keys, []string{"file1.bin", "file2.bin", "file4.bin"})
+	assert.Equal(t, []string{"file1.bin", "file2.bin", "file4.bin"}, c.keys["create"])
+}
+
+func TestSingleNotificationCloudFunctionConfigurationsCreatesWithFilters(t *testing.T) {
+	cfg := domain.NotificationConfiguration{
+		CloudFunctionConfigurations: []domain.CloudFunctionConfiguration{
+			{
+				Events:        []string{domain.ObjectCreatedFilter},
+				CloudFunction: "create",
+				Filter: domain.Filter{
+					S3Key: domain.S3Key{
+						FilterRules: []domain.FilterRule{
+							{
+								Name:  domain.PrefixFilter,
+								Value: "file1",
+							},
+							{
+								Name:  domain.SuffixFilter,
+								Value: "bin",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var c Collector
+	ch, ctx := cfg.Start(c.Append)
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.txt"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file3.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file4.bin"}}
+	close(ch)
+
+	timeout, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	<-timeout.Done()
+
+	assert.Equal(t, []string{"file1.bin"}, c.keys["create"])
+}
+
+func TestTwoNotificationCloudFunctionConfigurations(t *testing.T) {
+	cfg := domain.NotificationConfiguration{
+		CloudFunctionConfigurations: []domain.CloudFunctionConfiguration{
+			{
+				Events:        []string{domain.ObjectCreatedFilter},
+				CloudFunction: "create",
+			},
+			{
+				Events:        []string{domain.ObjectRemovedFilter},
+				CloudFunction: "delete",
+			},
+		},
+	}
+
+	var c Collector
+	ch, ctx := cfg.Start(c.Append)
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file3.bin"}}
+	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file4.bin"}}
+	close(ch)
+
+	timeout, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+
+	<-timeout.Done()
+
+	assert.Equal(t, []string{"file1.bin", "file2.bin"}, c.keys["create"])
+	assert.Equal(t, []string{"file3.bin", "file4.bin"}, c.keys["delete"])
 }
