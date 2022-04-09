@@ -71,7 +71,7 @@ func (app *App) StartDocker(errors chan error) {
 		return
 	}
 
-	basePath := filepath.Join(app.cfg.DataPath(), "s3")
+	basePath := filepath.Join(app.cfg.DataPath(), "buckets")
 	logger.Infof("Creating directory if necessary %s ...", basePath)
 
 	err = os.MkdirAll(basePath, 0755)

@@ -35,7 +35,7 @@ type Config struct {
 
 func (config *Config) DataPath() string {
 	if config.dataPath[0] == '/' {
-		return config.dataPath
+		return filepath.Join(config.dataPath, "s3")
 	}
 
 	cwd, err := os.Getwd()
@@ -43,7 +43,7 @@ func (config *Config) DataPath() string {
 		panic(err)
 	}
 
-	return filepath.Join(cwd, config.dataPath)
+	return filepath.Join(cwd, config.dataPath, "s3")
 }
 
 func (config *Config) MinioUrl() string {
