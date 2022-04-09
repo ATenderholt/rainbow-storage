@@ -6,7 +6,9 @@ require (
 	github.com/ATenderholt/dockerlib v1.2.1
 	github.com/go-chi/chi/v5 v5.0.7
 	github.com/google/wire v0.5.0
+	github.com/reactivex/rxgo/v2 v2.5.0
 	go.uber.org/zap v1.21.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -27,7 +29,6 @@ require (
 	github.com/opencontainers/image-spec v1.0.2-0.20211117181255-693428a734f5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/reactivex/rxgo/v2 v2.5.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.1 // indirect
