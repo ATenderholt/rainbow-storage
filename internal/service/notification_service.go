@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"github.com/ATenderholt/rainbow-storage/internal/domain"
 	"github.com/reactivex/rxgo/v2"
 	"gopkg.in/yaml.v2"
@@ -101,6 +102,20 @@ func (service NotificationService) Load(path string) error {
 	bucket := filename[0 : len(filename)-len(ext)]
 
 	service.buckets[bucket] = ch
+
+	return nil
+}
+
+func (service NotificationService) ProcessEvent(bucket string, event domain.NotificationEvent) error {
+	ch, ok := service.buckets[bucket]
+	if !ok {
+		err := fmt.Errorf("no NotificationConfiguration for for bucket %s has been registered", bucket)
+		logger.Error(err)
+		return err
+	}
+
+	item := rxgo.Item{V: event}
+	ch <- item
 
 	return nil
 }
