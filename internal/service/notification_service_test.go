@@ -9,9 +9,11 @@ import (
 	"testing"
 )
 
-type Config struct{}
+type TestHelper struct {
+	ch chan domain.NotificationEvent
+}
 
-func (c Config) DataPath() string {
+func (h TestHelper) DataPath() string {
 	dir, err := ioutil.TempDir("", "rainbow-test-*")
 	if err != nil {
 		panic(err)
@@ -20,17 +22,18 @@ func (c Config) DataPath() string {
 	return dir
 }
 
+func (h TestHelper) Invoke(string) func(interface{}) {
+	return func(i interface{}) {
+		h.ch <- i.(domain.NotificationEvent)
+	}
+}
+
 func TestNotificationServiceReadAndWrite(t *testing.T) {
 	// visibility into events
 	ch := make(chan domain.NotificationEvent)
-	factory := func() domain.EventFunction {
-		return func(_ string, i interface{}) {
-			ch <- i.(domain.NotificationEvent)
-		}
-	}
 
-	cfg := Config{}
-	s := service.NewNotificationService(cfg, factory)
+	cfg := TestHelper{ch}
+	s := service.NewNotificationService(cfg, cfg)
 
 	data := domain.NotificationConfiguration{
 		CloudFunctionConfigurations: []domain.CloudFunctionConfiguration{

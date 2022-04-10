@@ -6,12 +6,14 @@ import (
 	"strings"
 )
 
+type CloudFunctionInvoker interface {
+	Invoke(string) func(interface{})
+}
+
 type CloudFunction string
 
-func (c CloudFunction) Invoke(f EventFunction) func(interface{}) {
-	return func(i interface{}) {
-		f(string(c), i)
-	}
+func (c CloudFunction) Invoke(invoker CloudFunctionInvoker) func(interface{}) {
+	return invoker.Invoke(string(c))
 }
 
 type CloudFunctionConfiguration struct {
@@ -45,13 +47,13 @@ type NotificationConfiguration struct {
 
 type EventFunction func(string, interface{})
 
-func (n NotificationConfiguration) Start(f EventFunction) (chan rxgo.Item, context.Context) {
+func (n NotificationConfiguration) Start(invoker CloudFunctionInvoker) (chan rxgo.Item, context.Context) {
 	ch := make(chan rxgo.Item)
 
 	source := rxgo.FromChannel(ch, rxgo.WithPublishStrategy())
 	for _, funcConfigs := range n.CloudFunctionConfigurations {
 		obs := funcConfigs.CreateObservable(source)
-		obs.DoOnNext(funcConfigs.CloudFunction.Invoke(f))
+		obs.DoOnNext(funcConfigs.CloudFunction.Invoke(invoker))
 	}
 
 	ctx, _ := source.Connect(context.Background())

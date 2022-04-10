@@ -15,18 +15,16 @@ type Config interface {
 	DataPath() string
 }
 
-type InvokeFactory func() domain.EventFunction
-
 type NotificationService struct {
 	cfg     Config
-	factory InvokeFactory
+	invoker domain.CloudFunctionInvoker
 	buckets map[string]chan rxgo.Item
 }
 
-func NewNotificationService(config Config, factory InvokeFactory) *NotificationService {
+func NewNotificationService(config Config, invoker domain.CloudFunctionInvoker) *NotificationService {
 	return &NotificationService{
 		cfg:     config,
-		factory: factory,
+		invoker: invoker,
 		buckets: make(map[string]chan rxgo.Item),
 	}
 }
@@ -95,7 +93,7 @@ func (service NotificationService) Load(path string) error {
 		return err
 	}
 
-	ch, _ := config.Start(service.factory())
+	ch, _ := config.Start(service.invoker)
 
 	filename := filepath.Base(path)
 	ext := filepath.Ext(filename)
