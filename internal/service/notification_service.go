@@ -29,6 +29,10 @@ func NewNotificationService(config Config, invoker domain.CloudFunctionInvoker) 
 	}
 }
 
+func (service NotificationService) GetConfigurationPath(bucket string) string {
+	return filepath.Join(service.cfg.DataPath(), notificationDir, bucket+".yaml")
+}
+
 func (service NotificationService) Save(bucket string, config domain.NotificationConfiguration) (string, error) {
 	basePath := filepath.Join(service.cfg.DataPath(), notificationDir)
 	err := os.MkdirAll(basePath, 0755)

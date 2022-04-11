@@ -9,6 +9,9 @@ func NewChiMux(minio MinioHandler) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 
+	r.Use(minio.GetNotifications)
+	r.Use(minio.PutNotifications)
+
 	r.Head("/*", minio.Proxy)
 	r.Get("/*", minio.Proxy)
 	r.Post("/*", minio.Proxy)

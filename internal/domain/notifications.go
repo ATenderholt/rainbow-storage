@@ -19,7 +19,7 @@ func (c CloudFunction) Invoke(invoker CloudFunctionInvoker) func(interface{}) {
 type CloudFunctionConfiguration struct {
 	Events        []string `xml:"Event"`
 	Filter        Filter
-	ID            string
+	Id            string
 	CloudFunction CloudFunction
 }
 

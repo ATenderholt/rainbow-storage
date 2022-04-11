@@ -3,18 +3,23 @@ package http
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"github.com/ATenderholt/rainbow-storage/internal/domain"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"gopkg.in/yaml.v2"
 	"io"
+	"io/fs"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
 
 type NotificationService interface {
+	GetConfigurationPath(bucket string) string
 	Save(bucket string, config domain.NotificationConfiguration) (string, error)
 }
 
@@ -30,34 +35,104 @@ func NewMinioHandler(cfg *settings.Config, service NotificationService) MinioHan
 	}
 }
 
-func (h MinioHandler) handleNotificationConfiguration(w http.ResponseWriter, request *http.Request, payload []byte) {
-	var notification domain.NotificationConfiguration
-	err := xml.Unmarshal(payload, &notification)
-	if err != nil {
-		msg := fmt.Sprintf("unable to unmarshall notification %s: %v", string(payload), err)
-		logger.Error(msg)
-		http.Error(w, msg, http.StatusInternalServerError)
-		return
+func (h MinioHandler) GetNotifications(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		if !request.URL.Query().Has("notification") {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		if request.Method != "GET" {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := request.URL.Path[1:]
+		logger.Infof("Loading NotificationConfiguration for bucket %s", bucket)
+
+		path := h.service.GetConfigurationPath(bucket)
+		file, err := os.Open(path)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			logger.Warnf("File %s does not exist: %v", path, err)
+			http.NotFound(w, request)
+			return
+		case err != nil:
+			logger.Errorf("Error when opening file %s: %v", path, err)
+			http.Error(w, "error", http.StatusInternalServerError)
+			return
+		}
+		defer file.Close()
+
+		decoder := yaml.NewDecoder(file)
+
+		var notification domain.NotificationConfiguration
+		err = decoder.Decode(&notification)
+		if err != nil {
+			logger.Errorf("Unable to decode NotificationConfiguration for bucket %s: %v", bucket, err)
+			http.Error(w, "Unable to decode NotificationConfiguration", http.StatusInternalServerError)
+			return
+		}
+
+		encoder := xml.NewEncoder(w)
+		err = encoder.Encode(notification)
+		if err != nil {
+			logger.Errorf("Unable to encode NotificationConfiguration for bucket %s: %v", bucket, err)
+			http.Error(w, "Unable to encode NotificationConfiguration", http.StatusInternalServerError)
+			return
+		}
 	}
 
-	logger.Infof("Received Notification %+v for URL %s", notification, request.URL.Path)
-	bucket := request.URL.Path[1:]
+	return http.HandlerFunc(f)
+}
 
-	if len(notification.CloudFunctionConfigurations) == 0 {
-		logger.Infof("No configuration found fo raw payload: %s", string(payload))
-		logger.Infof("Query params: %v", request.URL.RawQuery)
-		http.Error(w, "No configuration functions", http.StatusBadRequest)
-		return
+func (h MinioHandler) PutNotifications(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		if !request.URL.Query().Has("notification") {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		if request.Method != "PUT" {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := request.URL.Path[1:]
+		logger.Infof("Saving NotificationConfiguration for bucket %s", bucket)
+
+		payload, _ := io.ReadAll(request.Body)
+		request.Body.Close()
+
+		var notification domain.NotificationConfiguration
+		err := xml.Unmarshal(payload, &notification)
+		if err != nil {
+			msg := fmt.Sprintf("unable to unmarshall notification %s: %v", string(payload), err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		logger.Infof("Received Notification %+v for URL %s", notification, request.URL.Path)
+
+		if len(notification.CloudFunctionConfigurations) == 0 {
+			logger.Infof("No configuration found fo raw payload: %s", string(payload))
+			logger.Infof("Query params: %v", request.URL.RawQuery)
+			http.Error(w, "No configuration functions", http.StatusBadRequest)
+			return
+		}
+
+		_, err = h.service.Save(bucket, notification)
+		if err != nil {
+			logger.Errorf("Unable to save notification for bucket %s", bucket)
+			http.Error(w, "Unable to save notification for bucket "+bucket, http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
 	}
 
-	_, err = h.service.Save(bucket, notification)
-	if err != nil {
-		logger.Errorf("Unable to save notification for bucket %s", bucket)
-		http.Error(w, "Unable to save notification for bucket "+bucket, http.StatusInternalServerError)
-		return
-	}
-
-	http.Error(w, "Not found", http.StatusNotFound)
+	return http.HandlerFunc(f)
 }
 
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
@@ -66,12 +141,6 @@ func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 
 	payload, err := io.ReadAll(request.Body)
 	request.Body.Close()
-
-	switch {
-	case bytes.Contains(payload, []byte("NotificationConfiguration")):
-		h.handleNotificationConfiguration(w, request, payload)
-		return
-	}
 
 	reader := bytes.NewReader(payload)
 	proxyReq, _ := http.NewRequest(request.Method, url, reader)
