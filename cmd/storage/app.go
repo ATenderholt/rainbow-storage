@@ -132,3 +132,16 @@ func (app App) Shutdown() error {
 	logger.Info("Finished shutting down application")
 	return err
 }
+
+type LambdaInvoker struct {
+}
+
+func NewLambdaInvoker() *LambdaInvoker {
+	return &LambdaInvoker{}
+}
+
+func (i LambdaInvoker) Invoke(bucket string) func(interface{}) {
+	return func(i interface{}) {
+		logger.Infof("Processing %+v for bucket %s", i, bucket)
+	}
+}

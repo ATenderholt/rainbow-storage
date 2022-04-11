@@ -14,13 +14,19 @@ import (
 	"time"
 )
 
-type MinioHandler struct {
-	cfg *settings.Config
+type NotificationService interface {
+	Save(bucket string, config domain.NotificationConfiguration) (string, error)
 }
 
-func NewMinioHandler(cfg *settings.Config) MinioHandler {
+type MinioHandler struct {
+	cfg     *settings.Config
+	service NotificationService
+}
+
+func NewMinioHandler(cfg *settings.Config, service NotificationService) MinioHandler {
 	return MinioHandler{
-		cfg: cfg,
+		cfg:     cfg,
+		service: service,
 	}
 }
 
@@ -35,9 +41,20 @@ func (h MinioHandler) handleNotificationConfiguration(w http.ResponseWriter, req
 	}
 
 	logger.Infof("Received Notification %+v for URL %s", notification, request.URL.Path)
+	bucket := request.URL.Path[1:]
+
 	if len(notification.CloudFunctionConfigurations) == 0 {
 		logger.Infof("No configuration found fo raw payload: %s", string(payload))
 		logger.Infof("Query params: %v", request.URL.RawQuery)
+		http.Error(w, "No configuration functions", http.StatusBadRequest)
+		return
+	}
+
+	_, err = h.service.Save(bucket, notification)
+	if err != nil {
+		logger.Errorf("Unable to save notification for bucket %s", bucket)
+		http.Error(w, "Unable to save notification for bucket "+bucket, http.StatusInternalServerError)
+		return
 	}
 
 	http.Error(w, "Not found", http.StatusNotFound)
