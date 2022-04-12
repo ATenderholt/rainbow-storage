@@ -5,6 +5,15 @@ import (
 	"github.com/ATenderholt/rainbow-storage/internal/domain"
 )
 
+type DirError struct {
+	path string
+	base error
+}
+
+func (e DirError) Error() string {
+	return "Unable to list directory " + e.path + ": " + e.base.Error()
+}
+
 type LoadError struct {
 	path string
 	base error

@@ -11,6 +11,7 @@ func NewChiMux(minio MinioHandler) *chi.Mux {
 
 	r.Use(minio.GetNotifications)
 	r.Use(minio.PutNotifications)
+	r.Use(minio.SendNotifications)
 
 	r.Head("/*", minio.Proxy)
 	r.Get("/*", minio.Proxy)

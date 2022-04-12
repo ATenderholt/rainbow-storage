@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ATenderholt/dockerlib"
+	"github.com/ATenderholt/rainbow-storage/internal/service"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/go-chi/chi/v5"
@@ -14,21 +15,23 @@ import (
 )
 
 type App struct {
-	cfg    *settings.Config
-	docker *dockerlib.DockerController
-	srv    *http.Server
+	cfg           *settings.Config
+	docker        *dockerlib.DockerController
+	notifyService *service.NotificationService
+	srv           *http.Server
 }
 
-func NewApp(cfg *settings.Config, docker *dockerlib.DockerController, mux *chi.Mux) App {
+func NewApp(cfg *settings.Config, docker *dockerlib.DockerController, notifyService *service.NotificationService, mux *chi.Mux) App {
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.BasePort),
 		Handler: mux,
 	}
 
 	return App{
-		cfg:    cfg,
-		docker: docker,
-		srv:    srv,
+		cfg:           cfg,
+		docker:        docker,
+		notifyService: notifyService,
+		srv:           srv,
 	}
 }
 
@@ -38,6 +41,7 @@ func (app App) Start() error {
 	go app.StartHttp(errors)
 
 	app.StartDocker(errors)
+	app.StartNotifications(errors)
 
 	select {
 	case err := <-errors:
@@ -111,6 +115,13 @@ func (app *App) StartDocker(errors chan error) {
 	logger.Info("Background storage container is ready")
 
 	return
+}
+
+func (app App) StartNotifications(errors chan error) {
+	err := app.notifyService.LoadAll()
+	if err != nil {
+		errors <- err
+	}
 }
 
 func (app App) Shutdown() error {

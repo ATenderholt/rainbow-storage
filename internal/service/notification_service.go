@@ -74,6 +74,13 @@ func (service NotificationService) Save(bucket string, config domain.Notificatio
 	return path, nil
 }
 
+func (service NotificationService) Start(bucket string, config domain.NotificationConfiguration) {
+	logger.Infof("Starting NotificationConfigurations for bucket %s", bucket)
+
+	ch, _ := config.Start(service.invoker)
+	service.buckets[bucket] = ch
+}
+
 func (service NotificationService) Load(path string) error {
 	file, err := os.Open(path)
 	if err != nil {
@@ -97,13 +104,38 @@ func (service NotificationService) Load(path string) error {
 		return err
 	}
 
-	ch, _ := config.Start(service.invoker)
-
 	filename := filepath.Base(path)
 	ext := filepath.Ext(filename)
 	bucket := filename[0 : len(filename)-len(ext)]
 
-	service.buckets[bucket] = ch
+	service.Start(bucket, config)
+
+	return nil
+}
+
+func (service NotificationService) LoadAll() error {
+	rootPath := filepath.Join(service.cfg.DataPath(), notificationDir)
+	entries, err := os.ReadDir(rootPath)
+	if err != nil {
+		e := DirError{path: rootPath, base: err}
+		logger.Error(e)
+		return e
+	}
+
+	for _, entry := range entries {
+		filename := entry.Name()
+		ext := filepath.Ext(filename)
+		if ext != ".yaml" {
+			logger.Infof("Skipping unexpected file: %s", filename)
+			continue
+		}
+
+		err = service.Load(filepath.Join(rootPath, filename))
+		if err != nil {
+			logger.Errorf("Unable load config file, not processing any more: %v", err)
+			return err
+		}
+	}
 
 	return nil
 }

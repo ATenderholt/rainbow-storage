@@ -26,7 +26,7 @@ func InjectApp(cfg *settings.Config) (App, error) {
 	notificationService := service.NewNotificationService(config, lambdaInvoker)
 	minioHandler := http.NewMinioHandler(cfg, notificationService)
 	mux := http.NewChiMux(minioHandler)
-	app := NewApp(cfg, dockerController, mux)
+	app := NewApp(cfg, dockerController, notificationService, mux)
 	return app, nil
 }
 

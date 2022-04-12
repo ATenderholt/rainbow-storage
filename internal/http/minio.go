@@ -20,7 +20,18 @@ import (
 
 type NotificationService interface {
 	GetConfigurationPath(bucket string) string
+	ProcessEvent(bucket string, event domain.NotificationEvent) error
 	Save(bucket string, config domain.NotificationConfiguration) (string, error)
+}
+
+type ResponseWriter struct {
+	http.ResponseWriter
+	Code *int
+}
+
+func (w ResponseWriter) WriteHeader(code int) {
+	*w.Code = code
+	w.ResponseWriter.WriteHeader(code)
 }
 
 type MinioHandler struct {
@@ -135,8 +146,51 @@ func (h MinioHandler) PutNotifications(next http.Handler) http.Handler {
 	return http.HandlerFunc(f)
 }
 
+func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		wrapped := ResponseWriter{
+			ResponseWriter: w,
+			Code:           new(int),
+		}
+
+		next.ServeHTTP(wrapped, request)
+
+		// Example /myaws-files/AWSLogs/small.log
+		if request.Method == http.MethodPut {
+
+		}
+
+		// Example /myaws-files/AWSLogs/test.log?uploadId=1bc7323b-ad52-4ca5-9606-e1e22c38cbbd
+		if request.Method == http.MethodPost && request.URL.Query().Has("uploadId") {
+			parts := strings.SplitN(request.URL.Path, "/", 3)
+			if len(parts) != 3 {
+				logger.Errorf("Unexpected path to send Notifications: %s", request.URL.Path)
+				return
+			}
+
+			if *wrapped.Code != http.StatusOK {
+				logger.Warnf("Multipart upload for key %s in bucket %s did not finish correctly", parts[2], parts[1])
+				return
+			}
+
+			logger.Infof("Completed multipart upload for key %s in bucket %s", parts[2], parts[1])
+			event := domain.NotificationEvent{
+				Key:   parts[2],
+				Event: domain.ObjectCreatedEvent,
+			}
+
+			err := h.service.ProcessEvent(parts[1], event)
+			if err != nil {
+				logger.Warnf("Unable to send event for key %s in bucket %s: %v", parts[2], parts[1], err)
+			}
+		}
+	}
+
+	return http.HandlerFunc(f)
+}
+
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
-	url := h.cfg.MinioUrl() + request.URL.Path
+	url := h.cfg.MinioUrl() + request.URL.Path + "?" + request.URL.RawQuery
 	logger.Infof("Forwarding to %s", url)
 
 	payload, err := io.ReadAll(request.Body)
