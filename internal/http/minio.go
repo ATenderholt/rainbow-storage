@@ -9,6 +9,7 @@ import (
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
+	"github.com/go-chi/chi/v5"
 	"gopkg.in/yaml.v2"
 	"io"
 	"io/fs"
@@ -53,12 +54,7 @@ func (h MinioHandler) GetNotifications(next http.Handler) http.Handler {
 			return
 		}
 
-		if request.Method != "GET" {
-			next.ServeHTTP(w, request)
-			return
-		}
-
-		bucket := request.URL.Path[1:]
+		bucket := chi.URLParam(request, "bucket")
 		logger.Infof("Loading NotificationConfiguration for bucket %s", bucket)
 
 		path := h.service.GetConfigurationPath(bucket)
@@ -104,12 +100,7 @@ func (h MinioHandler) PutNotifications(next http.Handler) http.Handler {
 			return
 		}
 
-		if request.Method != "PUT" {
-			next.ServeHTTP(w, request)
-			return
-		}
-
-		bucket := request.URL.Path[1:]
+		bucket := chi.URLParam(request, "bucket")
 		logger.Infof("Saving NotificationConfiguration for bucket %s", bucket)
 
 		payload, _ := io.ReadAll(request.Body)
@@ -155,34 +146,45 @@ func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
 
 		next.ServeHTTP(wrapped, request)
 
-		// Example /myaws-files/AWSLogs/small.log
-		if request.Method == http.MethodPut {
+		bucket := chi.URLParam(request, "bucket")
+		key := chi.URLParam(request, "*")
 
+		if key == "" {
+			return
 		}
 
-		// Example /myaws-files/AWSLogs/test.log?uploadId=1bc7323b-ad52-4ca5-9606-e1e22c38cbbd
-		if request.Method == http.MethodPost && request.URL.Query().Has("uploadId") {
-			parts := strings.SplitN(request.URL.Path, "/", 3)
-			if len(parts) != 3 {
-				logger.Errorf("Unexpected path to send Notifications: %s", request.URL.Path)
-				return
-			}
+		// Example finished uploads:
+		// PUT /myaws-files/AWSLogs/small.log
+		// POST /myaws-files/AWSLogs/test.log?uploadId=1bc7323b-ad52-4ca5-9606-e1e22c38cbbd
 
-			if *wrapped.Code != http.StatusOK {
-				logger.Warnf("Multipart upload for key %s in bucket %s did not finish correctly", parts[2], parts[1])
-				return
-			}
+		// Example start of uploading parts
+		// POST http://localhost:9000/myaws-files/AWSLogs/test.log?uploads
+		// don't send notification yet
+		if request.Method == http.MethodPost && request.URL.Query().Has("uploads") {
+			return
+		}
+		
+		// Example part upload:
+		// PUT http://localhost:9000/myaws-files/AWSLogs/test.log?uploadId=956d38ed-a2ef-4149-9382-3f4a819e503d&partNumber=2
+		// don't send notifications for parts yet
+		if request.Method == http.MethodPut && request.URL.Query().Has("uploadId") {
+			return
+		}
 
-			logger.Infof("Completed multipart upload for key %s in bucket %s", parts[2], parts[1])
-			event := domain.NotificationEvent{
-				Key:   parts[2],
-				Event: domain.ObjectCreatedEvent,
-			}
+		if *wrapped.Code != http.StatusOK {
+			logger.Warnf("Multipart upload for key %s in bucket %s did not finish correctly", key, bucket)
+			return
+		}
 
-			err := h.service.ProcessEvent(parts[1], event)
-			if err != nil {
-				logger.Warnf("Unable to send event for key %s in bucket %s: %v", parts[2], parts[1], err)
-			}
+		logger.Infof("Completed upload for key %s in bucket %s", key, bucket)
+		event := domain.NotificationEvent{
+			Key:   key,
+			Event: domain.ObjectCreatedEvent,
+		}
+
+		err := h.service.ProcessEvent(bucket, event)
+		if err != nil {
+			logger.Warnf("Unable to send event for key %s in bucket %s: %v", key, bucket, err)
 		}
 	}
 
