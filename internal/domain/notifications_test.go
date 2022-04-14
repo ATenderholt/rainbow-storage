@@ -36,7 +36,7 @@ type Collector struct {
 	keys map[string][]string
 }
 
-func (c *Collector) Append(source string, i interface{}) {
+func (c *Collector) Invoke(source string) func(interface{}) {
 	if c.keys == nil {
 		c.keys = make(map[string][]string)
 	}
@@ -46,8 +46,10 @@ func (c *Collector) Append(source string, i interface{}) {
 		items = []string{}
 	}
 
-	items = append(items, i.(domain.NotificationEvent).Key)
-	c.keys[source] = items
+	return func(i interface{}) {
+		items = append(items, i.(domain.NotificationEvent).Key)
+		c.keys[source] = items
+	}
 }
 
 func TestNotificationUnmarshall(t *testing.T) {
@@ -87,7 +89,7 @@ func TestSingleNotificationCloudFunctionConfigurationsOnlyCreates(t *testing.T) 
 	}
 
 	var c Collector
-	ch, ctx := cfg.Start(c.Append)
+	ch, ctx := cfg.Start(&c)
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file3.bin"}}
@@ -127,7 +129,7 @@ func TestSingleNotificationCloudFunctionConfigurationsCreatesWithFilters(t *test
 	}
 
 	var c Collector
-	ch, ctx := cfg.Start(c.Append)
+	ch, ctx := cfg.Start(&c)
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.txt"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
@@ -158,7 +160,7 @@ func TestTwoNotificationCloudFunctionConfigurations(t *testing.T) {
 	}
 
 	var c Collector
-	ch, ctx := cfg.Start(c.Append)
+	ch, ctx := cfg.Start(&c)
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file1.bin"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectCreatedEvent, Key: "file2.bin"}}
 	ch <- rxgo.Item{V: domain.NotificationEvent{Event: domain.ObjectRemovedEvent, Key: "file3.bin"}}
