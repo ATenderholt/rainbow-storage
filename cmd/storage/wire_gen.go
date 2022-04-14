@@ -22,7 +22,7 @@ func InjectApp(cfg *settings.Config) (App, error) {
 		return App{}, err
 	}
 	config := mapConfig(cfg)
-	lambdaInvoker := NewLambdaInvoker()
+	lambdaInvoker := NewLambdaInvoker(cfg)
 	notificationService := service.NewNotificationService(config, lambdaInvoker)
 	minioHandler := http.NewMinioHandler(cfg, notificationService)
 	mux := http.NewChiMux(minioHandler)

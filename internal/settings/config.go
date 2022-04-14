@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	DefaultAccountNumber = "271828182845"
-	DefaultRegion        = "us-west-2"
+	DefaultAccountNumber  = "271828182845"
+	DefaultRegion         = "us-west-2"
+	DefaultLambdaEndpoint = "http://localhost:9050"
 
 	DefaultBasePort = 9000
 	DefaultDataPath = "data"
@@ -21,10 +22,11 @@ const (
 )
 
 type Config struct {
-	AccountNumber string
-	IsDebug       bool
-	IsLocal       bool
-	Region        string
+	AccountNumber  string
+	IsDebug        bool
+	IsLocal        bool
+	Region         string
+	LambdaEndpoint string
 
 	BasePort int
 	dataPath string
@@ -63,14 +65,15 @@ func DefaultConfig() *Config {
 	}
 
 	return &Config{
-		AccountNumber: DefaultAccountNumber,
-		IsDebug:       false,
-		IsLocal:       true,
-		Region:        DefaultRegion,
-		BasePort:      DefaultBasePort,
-		dataPath:      DefaultDataPath,
-		Image:         DefaultImage,
-		Networks:      []string{DefaultNetworks},
+		AccountNumber:  DefaultAccountNumber,
+		IsDebug:        false,
+		IsLocal:        true,
+		Region:         DefaultRegion,
+		LambdaEndpoint: DefaultLambdaEndpoint,
+		BasePort:       DefaultBasePort,
+		dataPath:       DefaultDataPath,
+		Image:          DefaultImage,
+		Networks:       []string{DefaultNetworks},
 	}
 }
 
@@ -101,12 +104,13 @@ func FromFlags(name string, args []string) (*Config, string, error) {
 	networks := NetworkValue{[]string{DefaultNetworks}}
 	flags.StringVar(&cfg.AccountNumber, "account-number", DefaultAccountNumber, "Account number returned in ARNs")
 	flags.BoolVar(&cfg.IsDebug, "debug", false, "Enable debug logging")
-	flags.BoolVar(&cfg.IsLocal, "local", true, "Application should use localhost when routing lambda")
+	flags.BoolVar(&cfg.IsLocal, "local", true, "Application should use localhost when routing to s3 service")
 	flags.StringVar(&cfg.Region, "region", DefaultRegion, "Region returned in ARNs")
-	flags.IntVar(&cfg.BasePort, "port", DefaultBasePort, "Port used for HTTP and start of port range for individual lambdas")
+	flags.StringVar(&cfg.LambdaEndpoint, "lambda-endpoint", DefaultLambdaEndpoint, "Endpoint URL for lambda service")
+	flags.IntVar(&cfg.BasePort, "port", DefaultBasePort, "Port used for HTTP and start of port range for s3 service")
 	flags.StringVar(&cfg.Image, "image", DefaultImage, "Image to use for backing storage")
-	flags.StringVar(&cfg.dataPath, "data-path", DefaultDataPath, "Path to persist data and lambdas")
-	flags.Var(&networks, "networks", "Comma-separated list of Networks for lambda containers")
+	flags.StringVar(&cfg.dataPath, "data-path", DefaultDataPath, "Path to persist data and s3 configuration")
+	flags.Var(&networks, "networks", "Comma-separated list of Networks for containers")
 
 	err := flags.Parse(args)
 	if err != nil {

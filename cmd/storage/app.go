@@ -2,15 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/ATenderholt/dockerlib"
+	"github.com/ATenderholt/rainbow-storage/internal/domain"
 	"github.com/ATenderholt/rainbow-storage/internal/service"
 	"github.com/ATenderholt/rainbow-storage/internal/settings"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/lambda/types"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -145,14 +150,67 @@ func (app App) Shutdown() error {
 }
 
 type LambdaInvoker struct {
+	cfg    *settings.Config
+	client *lambda.Client
 }
 
-func NewLambdaInvoker() *LambdaInvoker {
-	return &LambdaInvoker{}
+func NewLambdaInvoker(cfg *settings.Config) *LambdaInvoker {
+	return &LambdaInvoker{
+		cfg:    cfg,
+		client: NewLambdaClient(cfg),
+	}
 }
 
-func (i LambdaInvoker) Invoke(bucket string) func(interface{}) {
+func (l LambdaInvoker) Invoke(lambdaArn string) func(interface{}) {
 	return func(i interface{}) {
-		logger.Infof("Processing %+v for bucket %s", i, bucket)
+		value := i.(domain.NotificationEvent)
+
+		logger.Infof("Processing %+v for lambdaArn %s", value, lambdaArn)
+		parts := strings.Split(lambdaArn, ":")
+
+		record := domain.LambdaRecord{
+			EventVersion:      "2.1",
+			EventSource:       "aws:s3",
+			AwsRegion:         l.cfg.Region,
+			EventTime:         domain.JsonTime(time.Now()),
+			EventName:         value.Event,
+			UserIdentity:      domain.LambdaUserIdentity{},
+			RequestParameters: domain.LambdaRequestParameters{},
+			ResponseElements:  domain.LambdaResponseElements{},
+			S3: domain.S3Record{
+				S3SchemaVersion: "1.0",
+				ConfigurationId: "",
+				Bucket: domain.S3Bucket{
+					Name:          "",
+					OwnerIdentity: domain.S3BucketOwnerIdentity{},
+					Arn:           "",
+				},
+				Object: domain.S3Object{
+					Key:       value.Key,
+					Size:      0,
+					ETag:      "",
+					Sequencer: "",
+				},
+			},
+		}
+
+		payload, err := json.Marshal(record)
+		if err != nil {
+			logger.Infof("Unable to marshal record for %+v: %v", i, err)
+		}
+
+		params := lambda.InvokeInput{
+			FunctionName:   &parts[7],
+			ClientContext:  nil,
+			InvocationType: types.InvocationTypeEvent,
+			LogType:        "",
+			Payload:        payload,
+			Qualifier:      nil,
+		}
+
+		_, err = l.client.Invoke(context.Background(), &params)
+		if err != nil {
+			return
+		}
 	}
 }
