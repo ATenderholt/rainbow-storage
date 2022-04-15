@@ -169,25 +169,29 @@ func (l LambdaInvoker) Invoke(lambdaArn string) func(interface{}) {
 		parts := strings.Split(lambdaArn, ":")
 
 		record := domain.LambdaRecord{
-			EventVersion:      "2.1",
-			EventSource:       "aws:s3",
-			AwsRegion:         l.cfg.Region,
-			EventTime:         domain.JsonTime(time.Now()),
-			EventName:         value.Event,
-			UserIdentity:      domain.LambdaUserIdentity{},
-			RequestParameters: domain.LambdaRequestParameters{},
-			ResponseElements:  domain.LambdaResponseElements{},
+			EventVersion: "2.1",
+			EventSource:  "aws:s3",
+			AwsRegion:    l.cfg.Region,
+			EventTime:    domain.JsonTime(time.Now()),
+			EventName:    value.Event,
+			UserIdentity: domain.LambdaUserIdentity{},
+			RequestParameters: domain.LambdaRequestParameters{
+				SourceIPAddress: value.SourceIp,
+			},
+			ResponseElements: domain.LambdaResponseElements{},
 			S3: domain.S3Record{
 				S3SchemaVersion: "1.0",
 				ConfigurationId: "",
 				Bucket: domain.S3Bucket{
-					Name:          "",
-					OwnerIdentity: domain.S3BucketOwnerIdentity{},
-					Arn:           "",
+					Name: value.Bucket,
+					OwnerIdentity: domain.S3BucketOwnerIdentity{
+						PrincipalId: "",
+					},
+					Arn: "arn:aws:s3:::" + value.Bucket,
 				},
 				Object: domain.S3Object{
 					Key:       value.Key,
-					Size:      0,
+					Size:      value.Size,
 					ETag:      "",
 					Sequencer: "",
 				},
@@ -200,7 +204,7 @@ func (l LambdaInvoker) Invoke(lambdaArn string) func(interface{}) {
 		}
 
 		params := lambda.InvokeInput{
-			FunctionName:   &parts[7],
+			FunctionName:   &parts[6],
 			ClientContext:  nil,
 			InvocationType: types.InvocationTypeEvent,
 			LogType:        "",

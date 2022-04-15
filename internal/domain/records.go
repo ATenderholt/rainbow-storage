@@ -4,7 +4,7 @@ import "time"
 
 type S3Object struct {
 	Key       string `json:"key"`
-	Size      int    `json:"size"`
+	Size      int64  `json:"size"`
 	ETag      string `json:"eTag"`
 	Sequencer string `json:"sequencer"`
 }

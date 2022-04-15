@@ -15,13 +15,14 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 type NotificationService interface {
 	GetConfigurationPath(bucket string) string
-	ProcessEvent(bucket string, event domain.NotificationEvent) error
+	ProcessEvent(event domain.NotificationEvent) error
 	Save(bucket string, config domain.NotificationConfiguration) (string, error)
 }
 
@@ -163,7 +164,7 @@ func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
 		if request.Method == http.MethodPost && request.URL.Query().Has("uploads") {
 			return
 		}
-		
+
 		// Example part upload:
 		// PUT http://localhost:9000/myaws-files/AWSLogs/test.log?uploadId=956d38ed-a2ef-4149-9382-3f4a819e503d&partNumber=2
 		// don't send notifications for parts yet
@@ -178,17 +179,31 @@ func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
 
 		logger.Infof("Completed upload for key %s in bucket %s", key, bucket)
 		event := domain.NotificationEvent{
-			Key:   key,
-			Event: domain.ObjectCreatedEvent,
+			Bucket:   bucket,
+			Key:      key,
+			Event:    domain.ObjectCreatedEvent,
+			SourceIp: request.RemoteAddr,
+			Size:     h.getObjectSize(bucket, key),
 		}
 
-		err := h.service.ProcessEvent(bucket, event)
+		err := h.service.ProcessEvent(event)
 		if err != nil {
 			logger.Warnf("Unable to send event for key %s in bucket %s: %v", key, bucket, err)
 		}
 	}
 
 	return http.HandlerFunc(f)
+}
+
+func (h MinioHandler) getObjectSize(bucket, key string) int64 {
+	objectPath := filepath.Join(h.cfg.DataPath(), "buckets", bucket, key)
+	stats, err := os.Stat(objectPath)
+	if err != nil {
+		logger.Warnf("Cannot get filesize of %s: %v", objectPath, err)
+		return -1
+	}
+
+	return stats.Size()
 }
 
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {

@@ -6,6 +6,9 @@ const (
 )
 
 type NotificationEvent struct {
-	Key   string // S3 Object key
-	Event string // S3 event (i.e. s3:ObjectCreated", "s3:ObjectRemoved", etc.)
+	Bucket   string
+	Key      string // S3 Object key
+	Event    string // S3 event (i.e. s3:ObjectCreated", "s3:ObjectRemoved", etc.)
+	SourceIp string
+	Size     int64
 }

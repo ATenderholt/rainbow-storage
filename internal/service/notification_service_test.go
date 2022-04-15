@@ -40,7 +40,7 @@ func TestNotificationServiceReadAndWrite(t *testing.T) {
 			{
 				Events:        []string{domain.ObjectCreatedEvent},
 				Filter:        domain.Filter{},
-				ID:            "some-id",
+				Id:            "some-id",
 				CloudFunction: domain.CloudFunction("something"),
 			},
 		},
@@ -65,12 +65,12 @@ func TestNotificationServiceReadAndWrite(t *testing.T) {
 
 	// send two events, first should be filtered out
 	testData := []domain.NotificationEvent{
-		{Event: domain.ObjectRemovedEvent, Key: "test.txt"},
-		{Event: domain.ObjectCreatedEvent, Key: "test.bin"},
+		{Event: domain.ObjectRemovedEvent, Bucket: "test", Key: "test.txt"},
+		{Event: domain.ObjectCreatedEvent, Bucket: "test", Key: "test.bin"},
 	}
 
 	for _, event := range testData {
-		err = s.ProcessEvent("test", event)
+		err = s.ProcessEvent(event)
 		if err != nil {
 			t.Fatalf("Error when processing event: %s", err)
 		}

@@ -140,10 +140,10 @@ func (service NotificationService) LoadAll() error {
 	return nil
 }
 
-func (service NotificationService) ProcessEvent(bucket string, event domain.NotificationEvent) error {
-	ch, ok := service.buckets[bucket]
+func (service NotificationService) ProcessEvent(event domain.NotificationEvent) error {
+	ch, ok := service.buckets[event.Bucket]
 	if !ok {
-		err := fmt.Errorf("no NotificationConfiguration for for bucket %s has been registered", bucket)
+		err := fmt.Errorf("no NotificationConfiguration for for bucket %s has been registered", event.Bucket)
 		logger.Error(err)
 		return err
 	}
