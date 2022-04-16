@@ -6,6 +6,7 @@ import (
 	"github.com/ATenderholt/rainbow-storage/internal/domain"
 	"github.com/reactivex/rxgo/v2"
 	"github.com/stretchr/testify/assert"
+	"sync"
 	"testing"
 	"time"
 )
@@ -33,22 +34,19 @@ const notificationExample = `<NotificationConfiguration
 </NotificationConfiguration>`
 
 type Collector struct {
-	keys map[string][]string
+	keys sync.Map
 }
 
 func (c *Collector) Invoke(source string) func(interface{}) {
-	if c.keys == nil {
-		c.keys = make(map[string][]string)
-	}
-
-	items, ok := c.keys[source]
-	if !ok {
-		items = []string{}
+	value, ok := c.keys.Load(source)
+	var items []string
+	if ok {
+		items = value.([]string)
 	}
 
 	return func(i interface{}) {
 		items = append(items, i.(domain.NotificationEvent).Key)
-		c.keys[source] = items
+		c.keys.Store(source, items)
 	}
 }
 
@@ -101,7 +99,8 @@ func TestSingleNotificationCloudFunctionConfigurationsOnlyCreates(t *testing.T) 
 
 	<-timeout.Done()
 
-	assert.Equal(t, []string{"file1.bin", "file2.bin", "file4.bin"}, c.keys["create"])
+	values, _ := c.keys.Load("create")
+	assert.Equal(t, []string{"file1.bin", "file2.bin", "file4.bin"}, values)
 }
 
 func TestSingleNotificationCloudFunctionConfigurationsCreatesWithFilters(t *testing.T) {
@@ -142,7 +141,8 @@ func TestSingleNotificationCloudFunctionConfigurationsCreatesWithFilters(t *test
 
 	<-timeout.Done()
 
-	assert.Equal(t, []string{"file1.bin"}, c.keys["create"])
+	values, _ := c.keys.Load("create")
+	assert.Equal(t, []string{"file1.bin"}, values)
 }
 
 func TestTwoNotificationCloudFunctionConfigurations(t *testing.T) {
@@ -172,6 +172,9 @@ func TestTwoNotificationCloudFunctionConfigurations(t *testing.T) {
 
 	<-timeout.Done()
 
-	assert.Equal(t, []string{"file1.bin", "file2.bin"}, c.keys["create"])
-	assert.Equal(t, []string{"file3.bin", "file4.bin"}, c.keys["delete"])
+	creates, _ := c.keys.Load("create")
+	assert.Equal(t, []string{"file1.bin", "file2.bin"}, creates)
+
+	deletes, _ := c.keys.Load("delete")
+	assert.Equal(t, []string{"file3.bin", "file4.bin"}, deletes)
 }
