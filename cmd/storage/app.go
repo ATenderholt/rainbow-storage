@@ -232,7 +232,7 @@ func (l LambdaInvoker) Invoke(lambdaArn string) func(interface{}) {
 
 		_, err = l.client.Invoke(context.Background(), &params)
 		if err != nil {
-			return
+			logger.Errorf("Unable to invoke lambda %s: %v", lambdaArn, err)
 		}
 	}
 }
