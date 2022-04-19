@@ -91,12 +91,29 @@ func (app *App) StartDocker(errors chan error) {
 		return
 	}
 
+	var mountPath string
+	if app.cfg.IsLocal {
+		mountPath = basePath
+	} else {
+		containerName := os.Getenv("NAME")
+		logger.Infof("Getting source for mount %s in container %s", app.cfg.DataPath(), containerName)
+		hostPath, err := app.docker.GetContainerHostPath(ctx, containerName, app.cfg.DataPath())
+		mountPath = strings.Replace(basePath, app.cfg.DataPath(), hostPath, 1)
+
+		if err != nil {
+			e := fmt.Errorf("unable to get host path for %s: %v", app.cfg.DataPath(), err)
+			logger.Error(e)
+			errors <- e
+			return
+		}
+	}
+
 	container := dockerlib.Container{
 		Name:  "s3",
 		Image: app.cfg.Image,
 		Mounts: []mount.Mount{
 			{
-				Source: basePath,
+				Source: mountPath,
 				Target: "/data",
 				Type:   mount.TypeBind,
 			},
@@ -113,6 +130,7 @@ func (app *App) StartDocker(errors chan error) {
 		e := fmt.Errorf("unable to start container: %v", err)
 		logger.Error(e)
 		errors <- e
+		return
 	}
 
 	<-ready
