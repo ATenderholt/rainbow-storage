@@ -122,7 +122,8 @@ func (app *App) StartDocker(errors chan error) {
 			9000: app.cfg.BasePort + 1,
 			9001: app.cfg.BasePort + 2,
 		},
-		Network: app.cfg.Networks,
+		Network:     app.cfg.Networks,
+		Environment: []string{"MINIO_REGION=us-west-2"},
 	}
 
 	ready, err := app.docker.Start(ctx, &container, "Documentation: https://docs.min.io")
