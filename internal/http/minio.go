@@ -20,6 +20,19 @@ import (
 	"time"
 )
 
+type SetDefaultFunc func([]byte) []byte
+
+var supportedQueries map[string]SetDefaultFunc
+
+func BytesPassThrough(config []byte) []byte {
+	return config
+}
+
+func init() {
+	supportedQueries = make(map[string]SetDefaultFunc)
+	supportedQueries["acl"] = BytesPassThrough
+}
+
 type NotificationService interface {
 	GetConfigurationPath(bucket string) string
 	ProcessEvent(event domain.NotificationEvent) error
@@ -27,6 +40,8 @@ type NotificationService interface {
 }
 
 type ConfigurationService interface {
+	SaveConfiguration(bucket string, configType string, config []byte) (string, error)
+	LoadConfiguration(bucket string, configType string) ([]byte, error)
 	SaveAccelerationConfiguration(bucket string, config []byte) (string, error)
 	LoadAccelerationConfiguration(bucket string) (domain.AccelerateConfiguration, error)
 }
@@ -338,4 +353,94 @@ func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 	}
 
 	return
+}
+
+func (h MinioHandler) GetConfig(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		queries, ok := getQueryKeys(request)
+		if !ok {
+			logger.Infof("unable to get queries from request context, continuing to next handler")
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		if len(queries) != 1 {
+			logger.Infof("number of queries != 1: %d, continuing to next handler", len(queries))
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		query := queries[0]
+		buildDefaultResponse, ok := supportedQueries[query]
+		if !ok {
+			logger.Infof("%s is not a supported query, continuing to next handler", query)
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := chi.URLParam(request, "bucket")
+		logger.Infof("Loading %s config for bucket %s", query, bucket)
+
+		config, err := h.configurationService.LoadConfiguration(bucket, query)
+		if err != nil {
+			msg := fmt.Sprintf("unable to load %s configuration for bucket %s: %v", query, bucket, err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		config = buildDefaultResponse(config)
+
+		_, err = w.Write(config)
+		if err != nil {
+			logger.Warnf("unable to write %s configuration for bucket %s to response: %v", query, bucket, err)
+		}
+	}
+
+	return http.HandlerFunc(f)
+}
+
+func (h MinioHandler) PutConfig(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		queries, ok := getQueryKeys(request)
+		if !ok {
+			logger.Infof("unable to get queries from request context, continuing to next handler")
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		if len(queries) != 1 {
+			logger.Infof("number of queries != 1: %d, continuing to next handler", len(queries))
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		query := queries[0]
+		_, ok = supportedQueries[query]
+		if !ok {
+			logger.Infof("%s is not a supported query, continuing to next handler", query)
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := chi.URLParam(request, "bucket")
+		logger.Infof("saving %s config for bucket %s", query, bucket)
+
+		payload, _ := io.ReadAll(request.Body)
+		request.Body.Close()
+
+		path, err := h.configurationService.SaveConfiguration(bucket, query, payload)
+		if err != nil {
+			msg := fmt.Sprintf("unable to save %s configuration for bucket %s: %v", query, bucket, err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		logger.Infof("saved %s config for bucket %s to %s", query, bucket, path)
+
+		w.WriteHeader(http.StatusOK)
+	}
+
+	return http.HandlerFunc(f)
 }
