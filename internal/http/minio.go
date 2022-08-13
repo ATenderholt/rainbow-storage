@@ -26,6 +26,11 @@ type NotificationService interface {
 	Save(bucket string, config domain.NotificationConfiguration) (string, error)
 }
 
+type ConfigurationService interface {
+	SaveAccelerationConfiguration(bucket string, config []byte) (string, error)
+	LoadAccelerationConfiguration(bucket string) (domain.AccelerateConfiguration, error)
+}
+
 type ResponseWriter struct {
 	http.ResponseWriter
 	Code *int
@@ -37,14 +42,20 @@ func (w ResponseWriter) WriteHeader(code int) {
 }
 
 type MinioHandler struct {
-	cfg     *settings.Config
-	service NotificationService
+	cfg                  *settings.Config
+	notificationService  NotificationService
+	configurationService ConfigurationService
 }
 
-func NewMinioHandler(cfg *settings.Config, service NotificationService) MinioHandler {
+func NewMinioHandler(
+	cfg *settings.Config,
+	notificationService NotificationService,
+	configurationService ConfigurationService,
+) MinioHandler {
 	return MinioHandler{
-		cfg:     cfg,
-		service: service,
+		cfg:                  cfg,
+		notificationService:  notificationService,
+		configurationService: configurationService,
 	}
 }
 
@@ -58,7 +69,7 @@ func (h MinioHandler) GetNotifications(next http.Handler) http.Handler {
 		bucket := chi.URLParam(request, "bucket")
 		logger.Infof("Loading NotificationConfiguration for bucket %s", bucket)
 
-		path := h.service.GetConfigurationPath(bucket)
+		path := h.notificationService.GetConfigurationPath(bucket)
 		file, err := os.Open(path)
 		switch {
 		case errors.Is(err, fs.ErrNotExist):
@@ -125,7 +136,7 @@ func (h MinioHandler) PutNotifications(next http.Handler) http.Handler {
 			return
 		}
 
-		_, err = h.service.Save(bucket, notification)
+		_, err = h.notificationService.Save(bucket, notification)
 		if err != nil {
 			logger.Errorf("Unable to save notification for bucket %s", bucket)
 			http.Error(w, "Unable to save notification for bucket "+bucket, http.StatusInternalServerError)
@@ -186,10 +197,78 @@ func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
 			Size:     h.getObjectSize(bucket, key),
 		}
 
-		err := h.service.ProcessEvent(event)
+		err := h.notificationService.ProcessEvent(event)
 		if err != nil {
 			logger.Warnf("Unable to send event for key %s in bucket %s: %v", key, bucket, err)
 		}
+	}
+
+	return http.HandlerFunc(f)
+}
+
+func (h MinioHandler) GetTransferAcceleration(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		if !request.URL.Query().Has("accelerate") {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := chi.URLParam(request, "bucket")
+		logger.Infof("Loading AcclerationConfiguration for bucket %s", bucket)
+
+		config, err := h.configurationService.LoadAccelerationConfiguration(bucket)
+		if err != nil {
+			msg := fmt.Sprintf("unable to load acceleration configuration for bucket %s: %v", bucket, err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		if config.Status == "" {
+			config.Status = "Disabled"
+		}
+
+		configBytes, err := xml.Marshal(config)
+		if err != nil {
+			msg := fmt.Sprintf("unable to marshall acceleration configuration for bucket %s: %v", bucket, err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		_, err = w.Write(configBytes)
+		if err != nil {
+			logger.Warnf("unable to write acceleration configuration for bucket %s to response: %v", bucket, err)
+		}
+	}
+
+	return http.HandlerFunc(f)
+}
+
+func (h MinioHandler) PutTransferAcceleration(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		if !request.URL.Query().Has("accelerate") {
+			next.ServeHTTP(w, request)
+			return
+		}
+
+		bucket := chi.URLParam(request, "bucket")
+		logger.Infof("Putting TranferAcceleration for bucket %s", bucket)
+
+		payload, _ := io.ReadAll(request.Body)
+		request.Body.Close()
+
+		path, err := h.configurationService.SaveAccelerationConfiguration(bucket, payload)
+		if err != nil {
+			msg := fmt.Sprintf("unable to save acceleration configuration for bucket %s: %v", bucket, err)
+			logger.Error(msg)
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+
+		logger.Infof("saved TransferAcceleration for bucket %s to %s", bucket, path)
+
+		w.WriteHeader(http.StatusOK)
 	}
 
 	return http.HandlerFunc(f)
@@ -208,7 +287,7 @@ func (h MinioHandler) getObjectSize(bucket, key string) int64 {
 
 func (h MinioHandler) Proxy(w http.ResponseWriter, request *http.Request) {
 	url := h.cfg.MinioUrl() + request.URL.Path + "?" + request.URL.RawQuery
-	logger.Infof("Forwarding to %s", url)
+	logger.Infof("Forwarding %s to %s", request.Method, url)
 
 	payload, err := io.ReadAll(request.Body)
 	request.Body.Close()

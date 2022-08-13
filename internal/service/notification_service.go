@@ -11,10 +11,6 @@ import (
 
 const notificationDir = "notifications"
 
-type Config interface {
-	DataPath() string
-}
-
 type NotificationService struct {
 	cfg     Config
 	invoker domain.CloudFunctionInvoker

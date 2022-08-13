@@ -23,7 +23,9 @@ func mapConfig(cfg *settings.Config) service.Config {
 
 var services = wire.NewSet(
 	service.NewNotificationService,
+	service.NewConfigurationService,
 	wire.Bind(new(http.NotificationService), new(*service.NotificationService)),
+	wire.Bind(new(http.ConfigurationService), new(*service.ConfigurationService)),
 	mapConfig,
 )
 

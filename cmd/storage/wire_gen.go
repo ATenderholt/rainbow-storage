@@ -24,7 +24,8 @@ func InjectApp(cfg *settings.Config) (App, error) {
 	config := mapConfig(cfg)
 	lambdaInvoker := NewLambdaInvoker(cfg)
 	notificationService := service.NewNotificationService(config, lambdaInvoker)
-	minioHandler := http.NewMinioHandler(cfg, notificationService)
+	configurationService := service.NewConfigurationService(config)
+	minioHandler := http.NewMinioHandler(cfg, notificationService, configurationService)
 	mux := http.NewChiMux(minioHandler)
 	app := NewApp(cfg, dockerController, notificationService, mux)
 	return app, nil
@@ -38,4 +39,4 @@ func mapConfig(cfg *settings.Config) service.Config {
 	return cfg
 }
 
-var services = wire.NewSet(service.NewNotificationService, wire.Bind(new(http.NotificationService), new(*service.NotificationService)), mapConfig)
+var services = wire.NewSet(service.NewNotificationService, service.NewConfigurationService, wire.Bind(new(http.NotificationService), new(*service.NotificationService)), wire.Bind(new(http.ConfigurationService), new(*service.ConfigurationService)), mapConfig)
