@@ -3,13 +3,9 @@ package service
 import (
 	"errors"
 	"io/fs"
+	"io/ioutil"
 	"os"
 	"path/filepath"
-)
-
-const (
-	accelerationDir = "acceleration"
-	aclDir          = "acl"
 )
 
 type ConfigurationService struct {
@@ -65,7 +61,7 @@ func (service ConfigurationService) SaveConfiguration(bucket string, configType 
 }
 
 func (service ConfigurationService) LoadConfiguration(bucket string, configType string) ([]byte, error) {
-	path := filepath.Join(service.cfg.DataPath(), accelerationDir, bucket+".xml")
+	path := filepath.Join(service.cfg.DataPath(), configType, bucket+".xml")
 	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -80,8 +76,7 @@ func (service ConfigurationService) LoadConfiguration(bucket string, configType 
 		}
 	}
 
-	var config []byte
-	_, err = file.Read(config)
+	config, err := ioutil.ReadAll(file)
 	if err != nil {
 		err := LoadError{
 			path: path,
