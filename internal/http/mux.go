@@ -43,13 +43,13 @@ func NewChiMux(minio MinioHandler) *chi.Mux {
 	r.Route("/{bucket}", func(r chi.Router) {
 		r.Head("/*", minio.Proxy)
 
-		r.With(minio.GetNotifications, minio.GetTransferAcceleration, minio.GetConfig).
+		r.With(minio.GetNotifications, minio.GetConfig).
 			Get("/*", minio.Proxy)
 
 		r.With(minio.SendNotifications).
 			Post("/*", minio.Proxy)
 
-		r.With(minio.PutNotifications, minio.SendNotifications, minio.PutTransferAcceleration, minio.PutConfig).
+		r.With(minio.PutNotifications, minio.SendNotifications, minio.PutConfig).
 			Put("/*", minio.Proxy)
 
 		r.Delete("/*", minio.Proxy)

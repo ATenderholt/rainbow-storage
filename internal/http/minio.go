@@ -20,19 +20,6 @@ import (
 	"time"
 )
 
-type SetDefaultFunc func([]byte) []byte
-
-var supportedQueries map[string]SetDefaultFunc
-
-func BytesPassThrough(config []byte) []byte {
-	return config
-}
-
-func init() {
-	supportedQueries = make(map[string]SetDefaultFunc)
-	supportedQueries["acl"] = BytesPassThrough
-}
-
 type NotificationService interface {
 	GetConfigurationPath(bucket string) string
 	ProcessEvent(event domain.NotificationEvent) error
@@ -42,8 +29,6 @@ type NotificationService interface {
 type ConfigurationService interface {
 	SaveConfiguration(bucket string, configType string, config []byte) (string, error)
 	LoadConfiguration(bucket string, configType string) ([]byte, error)
-	SaveAccelerationConfiguration(bucket string, config []byte) (string, error)
-	LoadAccelerationConfiguration(bucket string) (domain.AccelerateConfiguration, error)
 }
 
 type ResponseWriter struct {
@@ -216,74 +201,6 @@ func (h MinioHandler) SendNotifications(next http.Handler) http.Handler {
 		if err != nil {
 			logger.Warnf("Unable to send event for key %s in bucket %s: %v", key, bucket, err)
 		}
-	}
-
-	return http.HandlerFunc(f)
-}
-
-func (h MinioHandler) GetTransferAcceleration(next http.Handler) http.Handler {
-	f := func(w http.ResponseWriter, request *http.Request) {
-		if !request.URL.Query().Has("accelerate") {
-			next.ServeHTTP(w, request)
-			return
-		}
-
-		bucket := chi.URLParam(request, "bucket")
-		logger.Infof("Loading AcclerationConfiguration for bucket %s", bucket)
-
-		config, err := h.configurationService.LoadAccelerationConfiguration(bucket)
-		if err != nil {
-			msg := fmt.Sprintf("unable to load acceleration configuration for bucket %s: %v", bucket, err)
-			logger.Error(msg)
-			http.Error(w, msg, http.StatusInternalServerError)
-			return
-		}
-
-		if config.Status == "" {
-			config.Status = "Disabled"
-		}
-
-		configBytes, err := xml.Marshal(config)
-		if err != nil {
-			msg := fmt.Sprintf("unable to marshall acceleration configuration for bucket %s: %v", bucket, err)
-			logger.Error(msg)
-			http.Error(w, msg, http.StatusInternalServerError)
-			return
-		}
-
-		_, err = w.Write(configBytes)
-		if err != nil {
-			logger.Warnf("unable to write acceleration configuration for bucket %s to response: %v", bucket, err)
-		}
-	}
-
-	return http.HandlerFunc(f)
-}
-
-func (h MinioHandler) PutTransferAcceleration(next http.Handler) http.Handler {
-	f := func(w http.ResponseWriter, request *http.Request) {
-		if !request.URL.Query().Has("accelerate") {
-			next.ServeHTTP(w, request)
-			return
-		}
-
-		bucket := chi.URLParam(request, "bucket")
-		logger.Infof("Putting TranferAcceleration for bucket %s", bucket)
-
-		payload, _ := io.ReadAll(request.Body)
-		request.Body.Close()
-
-		path, err := h.configurationService.SaveAccelerationConfiguration(bucket, payload)
-		if err != nil {
-			msg := fmt.Sprintf("unable to save acceleration configuration for bucket %s: %v", bucket, err)
-			logger.Error(msg)
-			http.Error(w, msg, http.StatusInternalServerError)
-			return
-		}
-
-		logger.Infof("saved TransferAcceleration for bucket %s to %s", bucket, path)
-
-		w.WriteHeader(http.StatusOK)
 	}
 
 	return http.HandlerFunc(f)
