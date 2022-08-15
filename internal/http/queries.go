@@ -13,6 +13,17 @@ func init() {
 	supportedQueries = make(map[string]SetDefaultFunc)
 	supportedQueries["accelerate"] = defaultAccelerationConfiguration
 	supportedQueries["acl"] = bytesPassThrough
+	supportedQueries["cors"] = bytesPassThrough
+	supportedQueries["encryption"] = bytesPassThrough
+	supportedQueries["lifecycle"] = bytesPassThrough
+	supportedQueries["logging"] = bytesPassThrough
+	supportedQueries["object-lock"] = bytesPassThrough
+	supportedQueries["policy"] = bytesPassThrough
+	supportedQueries["replication"] = bytesPassThrough
+	supportedQueries["requestPayment"] = bytesPassThrough
+	supportedQueries["tagging"] = bytesPassThrough
+	supportedQueries["versioning"] = bytesPassThrough
+	supportedQueries["website"] = bytesPassThrough
 }
 
 func bytesPassThrough(config []byte) []byte {
