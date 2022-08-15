@@ -14,7 +14,7 @@ const queriesContextKey = RainbowContextKey("queries")
 func storeQueryKeys(next http.Handler) http.Handler {
 	f := func(w http.ResponseWriter, request *http.Request) {
 		var queries []string
-		for key, _ := range request.URL.Query() {
+		for key := range request.URL.Query() {
 			queries = append(queries, key)
 		}
 
@@ -52,7 +52,8 @@ func NewChiMux(minio MinioHandler) *chi.Mux {
 		r.With(minio.PutNotifications, minio.SendNotifications, minio.PutConfig).
 			Put("/*", minio.Proxy)
 
-		r.Delete("/*", minio.Proxy)
+		r.With(minio.CleanupConfig).
+			Delete("/*", minio.Proxy)
 	})
 
 	return r

@@ -27,8 +27,9 @@ type NotificationService interface {
 }
 
 type ConfigurationService interface {
-	SaveConfiguration(bucket string, configType string, config []byte) (string, error)
+	CleanupAllConfiguration(bucket string)
 	LoadConfiguration(bucket string, configType string) ([]byte, error)
+	SaveConfiguration(bucket string, configType string, config []byte) (string, error)
 }
 
 type ResponseWriter struct {
@@ -357,6 +358,18 @@ func (h MinioHandler) PutConfig(next http.Handler) http.Handler {
 		logger.Infof("saved %s config for bucket %s to %s", query, bucket, path)
 
 		w.WriteHeader(http.StatusOK)
+	}
+
+	return http.HandlerFunc(f)
+}
+
+func (h MinioHandler) CleanupConfig(next http.Handler) http.Handler {
+	f := func(w http.ResponseWriter, request *http.Request) {
+		bucket := chi.URLParam(request, "bucket")
+		logger.Infof("cleaning up config for bucket %s", bucket)
+
+		h.configurationService.CleanupAllConfiguration(bucket)
+		next.ServeHTTP(w, request)
 	}
 
 	return http.HandlerFunc(f)

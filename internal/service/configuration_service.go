@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"io/ioutil"
 	"os"
@@ -87,4 +88,24 @@ func (service ConfigurationService) LoadConfiguration(bucket string, configType 
 	}
 
 	return config, nil
+}
+
+func (service ConfigurationService) CleanupAllConfiguration(bucket string) {
+	path := filepath.Join(service.cfg.DataPath())
+	glob := fmt.Sprintf("%s/*/%s.xml", path, bucket)
+	logger.Infof("cleaning up config files using glob %s", glob)
+
+	files, err := filepath.Glob(glob)
+	if err != nil {
+		logger.Errorf("bad glob for cleaning up: %v", err)
+		return
+	}
+
+	for _, file := range files {
+		logger.Infof("removing config file %s", file)
+		e := os.Remove(file)
+		if e != nil {
+			logger.Warnf("unable to delete %s: %v", file, e)
+		}
+	}
 }
